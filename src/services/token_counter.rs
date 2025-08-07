@@ -1,5 +1,5 @@
 use crate::models::claude_count_tokens::{ClaudeCountTokensRequest, ClaudeCountTokensResponse, SystemPrompt};
-use crate::models::claude_messages::{ContentBlock, Message};
+use crate::models::claude_messages::ContentBlock;
 
 pub struct TokenCounter;
 

@@ -1,17 +1,13 @@
 use crate::adapters::{
-    request_adapter::{ClaudeToQwenAdapter, RequestAdapter},
-    response_adapter::{QwenToClaudeAdapter, ResponseAdapter},
+    request_adapter::ClaudeToQwenAdapter, 
+    response_adapter::QwenToClaudeAdapter,
+    Adaptor
 };
 use crate::config::Config;
-use crate::models::{claude::*, qwen3::*, claude_messages::*, claude_count_tokens::*};
+use crate::models::{claude::*, claude_count_tokens::*, claude_messages::*};
 use crate::services::qwen_service::{QwenClient, QwenService};
 use crate::services::token_counter::TokenCounter;
-use axum::{
-    extract::State,
-    http::StatusCode,
-    routing::post,
-    Json, Router,
-};
+use axum::{Json, Router, extract::State, http::StatusCode, routing::post};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -31,27 +27,30 @@ impl AppState {
     }
 }
 
-pub async fn health_check() -> std::result::Result<&'static str, StatusCode> {
+pub async fn health_check() -> Result<&'static str, StatusCode> {
     Ok("OK")
 }
 
 pub async fn handle_chat_completion(
     State(state): State<AppState>,
     Json(request): Json<ClaudeRequest>,
-) -> std::result::Result<Json<ClaudeResponse>, StatusCode> {
+) -> Result<Json<ClaudeResponse>, StatusCode> {
     // Transform Claude request to Qwen request
-    let qwen_request = state.request_adapter
+    let qwen_request = state
+        .request_adapter
         .adapt(request)
         .map_err(|_| StatusCode::BAD_REQUEST)?;
 
     // Send request to Qwen API
-    let qwen_response = state.qwen_service
+    let qwen_response = state
+        .qwen_service
         .send_request(qwen_request)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Transform Qwen response to Claude response
-    let claude_response = state.response_adapter
+    let claude_response = state
+        .response_adapter
         .adapt(qwen_response)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -61,41 +60,48 @@ pub async fn handle_chat_completion(
 pub async fn handle_claude_messages(
     State(state): State<AppState>,
     Json(request): Json<ClaudeMessagesRequest>,
-) -> std::result::Result<Json<ClaudeMessagesResponse>, StatusCode> {
+) -> Result<Json<ClaudeMessagesResponse>, StatusCode> {
     // Convert Claude Messages format to Claude Chat format for compatibility
     let claude_request = ClaudeRequest {
         model: request.model,
-        messages: request.messages.into_iter().map(|msg| {
-            let content = msg.content.into_iter()
-                .find_map(|block| match block {
-                    ContentBlock::Text { text, .. } => Some(text),
-                    _ => None,
-                })
-                .unwrap_or_default();
-            
-            ClaudeMessage {
-                role: match msg.role {
-                    MessageRole::User => ClaudeRole::User,
-                    MessageRole::Assistant => ClaudeRole::Assistant,
-                },
-                content,
-            }
-        }).collect(),
+        messages: request
+            .messages
+            .into_iter()
+            .map(|msg| {
+                let content = msg
+                    .content
+                    .into_iter()
+                    .find_map(|block| match block {
+                        ContentBlock::Text { text, .. } => Some(text),
+                        _ => None,
+                    })
+                    .unwrap_or_default();
+
+                ClaudeMessage {
+                    role: match msg.role {
+                        MessageRole::User => ClaudeRole::User,
+                        MessageRole::Assistant => ClaudeRole::Assistant,
+                    },
+                    content,
+                }
+            })
+            .collect(),
         max_tokens: request.max_tokens,
         temperature: request.temperature,
         stream: request.stream,
         system: request.system,
         tools: request.tools.map(|tools| {
-            tools.into_iter().map(|tool| {
-                crate::models::claude::ToolDefinition {
+            tools
+                .into_iter()
+                .map(|tool| crate::models::claude::ToolDefinition {
                     tool_type: "function".to_string(),
-                    function: crate::models::claude::FunctionDefinition {
+                    function: FunctionDefinition {
                         name: tool.name,
                         description: tool.description,
                         parameters: tool.input_schema,
                     },
-                }
-            }).collect()
+                })
+                .collect()
         }),
         tool_choice: request.tool_choice.map(|choice| match choice {
             crate::models::claude_messages::ToolChoice::Auto => crate::models::claude::ToolChoice {
@@ -106,20 +112,24 @@ pub async fn handle_claude_messages(
                 choice_type: "any".to_string(),
                 function: None,
             },
-            crate::models::claude_messages::ToolChoice::Tool { choice_type, name } => crate::models::claude::ToolChoice {
-                choice_type,
-                function: Some(crate::models::claude::FunctionChoice { name }),
-            },
+            crate::models::claude_messages::ToolChoice::Tool { choice_type, name } => {
+                crate::models::claude::ToolChoice {
+                    choice_type,
+                    function: Some(FunctionChoice { name }),
+                }
+            }
         }),
     };
 
     // Transform Claude request to Qwen request
-    let qwen_request = state.request_adapter
+    let qwen_request = state
+        .request_adapter
         .adapt(claude_request)
         .map_err(|_| StatusCode::BAD_REQUEST)?;
 
     // Send request to Qwen API
-    let qwen_response = state.qwen_service
+    let qwen_response = state
+        .qwen_service
         .send_request(qwen_request)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -127,14 +137,14 @@ pub async fn handle_claude_messages(
     // Transform Qwen response to Claude Messages format
     let choice = &qwen_response.output.choices[0];
     let mut content = Vec::new();
-    
+
     // Add text content if present
     if !choice.message.content.is_empty() {
         content.push(ResponseContentBlock::Text {
             text: choice.message.content.clone(),
         });
     }
-    
+
     // Add tool calls if present
     if let Some(tool_calls) = &choice.tool_calls {
         for call in tool_calls {
@@ -166,7 +176,7 @@ pub async fn handle_claude_messages(
 pub async fn handle_count_tokens(
     State(_state): State<AppState>,
     Json(request): Json<ClaudeCountTokensRequest>,
-) -> std::result::Result<Json<ClaudeCountTokensResponse>, StatusCode> {
+) -> Result<Json<ClaudeCountTokensResponse>, StatusCode> {
     let response = TokenCounter::count_tokens(request);
     Ok(Json(response))
 }

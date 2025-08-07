@@ -6,12 +6,12 @@ pub mod cli;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::adapters::request_adapter::ClaudeToQwenAdapter;
+    use crate::adapters::Adaptor;
     use crate::models::{
-        claude::{ClaudeRequest, ClaudeMessage, ClaudeRole},
-        qwen3::{QwenRequest, QwenMessage, QwenRole},
+        claude::{ClaudeMessage, ClaudeRequest, ClaudeRole},
+        qwen3::QwenRole,
     };
-    use crate::adapters::request_adapter::{RequestAdapter, ClaudeToQwenAdapter};
 
     #[test]
     fn test_full_integration() {

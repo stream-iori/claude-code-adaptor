@@ -1,5 +1,5 @@
-use crate::models::{qwen3::*, error::AdaptorError};
-type Result<T> = std::result::Result<T, AdaptorError>;
+use crate::models::qwen3::*;
+use anyhow::{Context, Result};
 use crate::config::QwenConfig;
 use reqwest::{Client, header};
 
@@ -31,16 +31,18 @@ impl QwenClient for QwenService {
             .header(header::CONTENT_TYPE, "application/json")
             .json(&request)
             .send()
-            .await?;
+            .await
+            .context("Failed to send request to Qwen API")?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(crate::models::error::AdaptorError::ApiError(format!(
-                "Qwen API request failed: {}", error_text
-            )));
+            return Err(anyhow::anyhow!("Qwen API request failed: {}", error_text));
         }
 
-        let qwen_response = response.json::<QwenResponse>().await?;
+        let qwen_response = response
+            .json::<QwenResponse>()
+            .await
+            .context("Failed to parse Qwen API response")?;
         Ok(qwen_response)
     }
 
@@ -53,13 +55,12 @@ impl QwenClient for QwenService {
             .header(header::CONTENT_TYPE, "application/json")
             .json(&request)
             .send()
-            .await?;
+            .await
+            .context("Failed to send stream request to Qwen API")?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(crate::models::error::AdaptorError::ApiError(format!(
-                "Qwen API stream request failed: {}", error_text
-            )));
+            return Err(anyhow::anyhow!("Qwen API stream request failed: {}", error_text));
         }
 
         Ok(response)
