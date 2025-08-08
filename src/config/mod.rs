@@ -1,12 +1,10 @@
-use serde::{Deserialize, Serialize};
-use std::env;
 use crate::models::error::AdaptorError;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub server: ServerConfig,
     pub qwen: QwenConfig,
-    pub claude: ClaudeConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,12 +20,6 @@ pub struct QwenConfig {
     pub model: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ClaudeConfig {
-    pub api_key: String,
-    pub base_url: String,
-}
-
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -36,27 +28,39 @@ impl Default for Config {
                 port: 8080,
             },
             qwen: QwenConfig {
-                api_key: env::var("QWEN_API_KEY").unwrap_or_default(),
+                api_key: "test".to_string(),
                 base_url: "https://dashscope.aliyuncs.com/api/v1".to_string(),
                 model: "qwen3-coder".to_string(),
-            },
-            claude: ClaudeConfig {
-                api_key: env::var("CLAUDE_API_KEY").unwrap_or_default(),
-                base_url: "https://api.anthropic.com".to_string(),
             },
         }
     }
 }
 
 impl Config {
-    pub fn load() -> std::result::Result<Self, AdaptorError> {
-        dotenv::dotenv().ok();
-        
-        let config = Config::default();
+    pub fn load(config_path: &str) -> Result<Self, AdaptorError> {
+        use std::fs;
+        use std::path::Path;
+
+        if !Path::new(config_path).exists() {
+            let config = Config::default();
+            return Ok(config);
+        }
+
+        let config_content = fs::read_to_string(config_path).map_err(|e| {
+            AdaptorError::Configuration(format!("Failed to read config file: {}", e))
+        })?;
+
+        let mut config: Config = serde_json::from_str(&config_content).map_err(|e| {
+            AdaptorError::Configuration(format!("Failed to parse config JSON: {}", e))
+        })?;
+
+        if config.qwen.api_key.is_empty() {
+            return Err(AdaptorError::Configuration("API_KEY is empty".to_string()));
+        }
 
         if config.qwen.api_key.is_empty() {
             return Err(AdaptorError::Configuration(
-                "QWEN_API_KEY environment variable is required".to_string(),
+                "API_KEY is required".to_string(),
             ));
         }
         

@@ -1,0 +1,11 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 9000
+  },
+  "qwen": {
+    "api_key": "custom-api-key-123",
+    "base_url": "https://custom-qwen-api.example.com/v1",
+    "model": "qwen3-custom"
+  }
+}

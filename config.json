@@ -1,0 +1,11 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8080
+  },
+  "qwen": {
+    "api_key": "your-qwen-api-key-here",
+    "base_url": "https://dashscope.aliyuncs.com/api/v1",
+    "model": "qwen3-coder"
+  }
+}

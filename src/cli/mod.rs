@@ -17,11 +17,8 @@ pub struct Cli {
 pub enum Commands {
     /// Start the proxy server
     Start {
-        #[arg(short, long, default_value = "127.0.0.1")]
-        host: String,
-        
-        #[arg(short, long, default_value = "8080")]
-        port: u16,
+        #[arg(short, long, default_value = "config.json")]
+        config_path: String,
     },
     
     /// Check proxy health status
@@ -29,39 +26,33 @@ pub enum Commands {
         #[arg(short, long, default_value = "http://127.0.0.1:8080")]
         url: String,
     },
-    
-    /// Display configuration
-    Config,
 }
 
 impl Cli {
     pub async fn run(&self) -> anyhow::Result<()> {
         match &self.command {
-            Commands::Start { host, port } => {
-                self.start_server(host, *port).await
+            Commands::Start { config_path } => {
+                self.start_server(config_path).await
             }
             Commands::Health { url } => {
                 self.check_health(url).await
             }
-            Commands::Config => {
-                self.display_config()
-            }
         }
     }
     
-    async fn start_server(&self, host: &str, port: u16) -> anyhow::Result<()> {
+    async fn start_server(&self, config_path: &str) -> anyhow::Result<()> {
         tracing_subscriber::fmt::init();
         
-        let config = Config::load()?;
-        let state = AppState::new(config);
-        
-        let addr = SocketAddr::new(host.parse()?, port);
+        let config = Config::load(config_path)?;
+        let state = AppState::new(config.clone());
+
+        let server_config = &config.server;
+        let addr = SocketAddr::new(server_config.host.parse()?, server_config.port);
         let app = create_router(state);
         
         info!("Starting Claude Code Adaptor server on {}", addr);
         info!("Health check: http://{}/health", addr);
-        info!("Message: POST http://{}/v1/message", addr);
-        
+
         let listener = tokio::net::TcpListener::bind(&addr).await?;
         serve(listener, app).await?;
             
@@ -85,17 +76,5 @@ impl Cli {
                 Err(anyhow::anyhow!("Connection failed: {}", e))
             }
         }
-    }
-    
-    fn display_config(&self) -> anyhow::Result<()> {
-        let config = Config::load()?;
-        
-        println!("📋 Configuration:");
-        println!("   Server: {}:{}", config.server.host, config.server.port);
-        println!("   Qwen Model: {}", config.qwen.model);
-        println!("   Qwen Base URL: {}", config.qwen.base_url);
-        println!("   Claude Base URL: {}", config.claude.base_url);
-        
-        Ok(())
     }
 }
