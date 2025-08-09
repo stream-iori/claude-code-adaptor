@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub server: ServerConfig,
-    pub qwen: QwenConfig,
+    pub openai: OpenAIConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -14,7 +14,7 @@ pub struct ServerConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct QwenConfig {
+pub struct OpenAIConfig {
     pub api_key: String,
     pub base_url: String,
     pub model: String,
@@ -39,11 +39,11 @@ impl Config {
             AdaptorError::Configuration(format!("Failed to parse config JSON: {}", e))
         })?;
 
-        if config.qwen.api_key.is_empty() {
+        if config.openai.api_key.is_empty() {
             return Err(AdaptorError::Configuration("API_KEY is empty".to_string()));
         }
 
-        if config.qwen.api_key.is_empty() {
+        if config.openai.api_key.is_empty() {
             return Err(AdaptorError::Configuration(
                 "API_KEY is required".to_string(),
             ));

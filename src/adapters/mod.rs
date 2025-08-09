@@ -1,5 +1,6 @@
 pub(crate) mod request_adapter;
-pub(crate) mod response_adapter;
+pub(crate) mod openai_response_adapter;
+pub(crate) mod openai_stream_adapter;
 
 use anyhow::Result;
 

@@ -14,7 +14,8 @@
       "Bash(git push:*)",
       "Bash(QWEN_API_KEY=test-key cargo run -- --help)",
       "Bash(cargo run:*)",
-      "Bash(CONFIG_PATH=custom_config.json cargo run -- config)"
+      "Bash(CONFIG_PATH=custom_config.json cargo run -- config)",
+      "Bash(grep:*)"
     ],
     "deny": []
   }

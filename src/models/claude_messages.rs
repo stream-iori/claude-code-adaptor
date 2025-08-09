@@ -4,33 +4,64 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClaudeMessagesRequest {
     pub model: String,
+
     pub messages: Vec<Message>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<u32>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub container: Option<String>,
+
+    //mcp_servers
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<HashMap<String, serde_json::Value>>,
+
+    //service_tier
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stop_sequences: Option<Vec<String>>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream: Option<bool>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub system: Option<String>,
+    pub system: Option<SystemContentEnum>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub top_k: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub top_p: Option<f32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tools: Option<Vec<ToolDefinition>>,
+
+    //thinking
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_choice: Option<ToolChoice>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<ToolDefinition>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub top_k: Option<u32>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub top_p: Option<f32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SystemContent {
+    #[serde(rename = "type")]
+    pub content_type: String,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum SystemContentEnum {
+    String(String),
+    Array(Vec<SystemContent>),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Message {
     pub role: MessageRole,
-    pub content: Vec<ContentBlock>,
+    pub content: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -94,23 +125,33 @@ impl ContentBlock {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClaudeMessagesResponse {
     pub id: String,
+
     #[serde(rename = "type")]
     pub response_type: String,
+
     pub role: String,
     pub content: Vec<ResponseContentBlock>,
     pub model: String,
     pub stop_reason: Option<String>,
     pub stop_sequence: Option<String>,
     pub usage: Usage,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub container: Option<ResponseContainer>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResponseContainer {
+    pub id: String,
+    pub expires_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum ResponseContentBlock {
     #[serde(rename = "text")]
-    Text {
-        text: String,
-    },
+    Text { text: String },
+
     #[serde(rename = "tool_use")]
     ToolUse {
         id: String,
@@ -123,6 +164,10 @@ pub enum ResponseContentBlock {
 pub struct Usage {
     pub input_tokens: u32,
     pub output_tokens: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_read_input_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_creation_input_tokens: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -182,4 +227,49 @@ pub enum ToolChoice {
         choice_type: String,
         name: String,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_claude_message() {
+        let claude_request = r#"
+            {
+                "model": "claude-3-5-haiku-20241022",
+                "max_tokens": 512,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "who are you"
+                    }
+                ],
+                "system": [{
+                    "type": "text",
+                    "text": "Analyze if this message indicates a new conversation topic. If it does, extract a 2-3 word title that captures the new topic. Format your response as a JSON object with two fields: 'isNewTopic' (boolean) and 'title' (string, or null if isNewTopic is false). Only include these fields, no other text."
+                }],
+                "temperature": 0,
+                "metadata": {
+                    "user_id": "user_8b8886105677a603d22a9d4b562314eac9258ce75f8c387d16fcd9b80475d6ec_account__session_d4a424e2-ff1a-4110-901e-1e6ba2e7af4c"
+                },
+                "stream": true
+            }
+        "#;
+
+        let claude_messages_request: ClaudeMessagesRequest =
+            serde_json::from_str(claude_request).expect("Failed to parse ClaudeMessagesRequest");
+        assert_eq!(claude_messages_request.model, "claude-3-5-haiku-20241022");
+        assert_eq!(claude_messages_request.max_tokens, Some(512));
+        assert_eq!(claude_messages_request.messages.len(), 1);
+        assert_eq!(claude_messages_request.messages[0].role, MessageRole::User);
+        assert_eq!(claude_messages_request.messages[0].content, "who are you");
+        match claude_messages_request.system.unwrap() {
+            crate::models::claude_messages::SystemContentEnum::Array(contents) => {
+                assert_eq!(contents.len(), 1);
+                assert_eq!(contents[0].text, "Analyze if this message indicates a new conversation topic. If it does, extract a 2-3 word title that captures the new topic. Format your response as a JSON object with two fields: 'isNewTopic' (boolean) and 'title' (string, or null if isNewTopic is false). Only include these fields, no other text.");
+            }
+            _ => panic!("Expected array format"),
+        }
+    }
 }

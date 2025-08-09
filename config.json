@@ -1,11 +1,11 @@
 {
   "server": {
     "host": "127.0.0.1",
-    "port": 8080
+    "port": 9000
   },
-  "qwen": {
-    "api_key": "your-qwen-api-key-here",
-    "base_url": "https://dashscope.aliyuncs.com/api/v1",
-    "model": "qwen3-coder"
+  "openai": {
+    "api_key": "sk-6d13fee726174860822b46cdceef4e2c",
+    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "model": "qwen3-coder-flash"
   }
 }

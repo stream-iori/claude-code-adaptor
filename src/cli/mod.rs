@@ -23,7 +23,7 @@ pub enum Commands {
     
     /// Check proxy health status
     Health {
-        #[arg(short, long, default_value = "http://127.0.0.1:8080")]
+        #[arg(short, long, default_value = "http://127.0.0.1:9000")]
         url: String,
     },
 }
@@ -41,8 +41,6 @@ impl Cli {
     }
     
     async fn start_server(&self, config_path: &str) -> anyhow::Result<()> {
-        tracing_subscriber::fmt::init();
-        
         let config = Config::load(config_path)?;
         let state = AppState::new(config.clone());
 

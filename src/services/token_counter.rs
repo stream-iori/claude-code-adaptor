@@ -1,5 +1,4 @@
 use crate::models::claude_count_tokens::{ClaudeCountTokensRequest, ClaudeCountTokensResponse, SystemPrompt};
-use crate::models::claude_messages::ContentBlock;
 
 pub struct TokenCounter;
 
@@ -12,9 +11,7 @@ impl TokenCounter {
         // Count tokens for messages
         if let Some(messages) = request.messages {
             for message in messages {
-                for content_block in message.content {
-                    total_tokens += Self::count_content_block_tokens(&content_block);
-                }
+                total_tokens += Self::estimate_tokens(&message.content);
             }
         }
 
@@ -40,25 +37,6 @@ impl TokenCounter {
         }
     }
 
-    fn count_content_block_tokens(content_block: &ContentBlock) -> u32 {
-        match content_block {
-            ContentBlock::Text { text, .. } => Self::estimate_tokens(text),
-            ContentBlock::ToolUse { id, name, input, .. } => {
-                let mut tokens = 0;
-                tokens += Self::estimate_tokens(id);
-                tokens += Self::estimate_tokens(name);
-                tokens += Self::estimate_tokens(&input.to_string());
-                tokens
-            }
-            ContentBlock::ToolResult { tool_use_id, content, .. } => {
-                let mut tokens = 0;
-                tokens += Self::estimate_tokens(tool_use_id);
-                tokens += Self::estimate_tokens(content);
-                tokens
-            }
-        }
-    }
-
     fn estimate_tokens(text: &str) -> u32 {
         // Rough approximation: 1 token ≈ 4 characters on average
         // This is a simplification - real tokenization is more complex
@@ -76,7 +54,7 @@ impl TokenCounter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::claude_messages::{ContentBlock, Message, MessageRole};
+    use crate::models::claude_messages::{Message, MessageRole};
     use crate::models::claude_count_tokens::ClaudeCountTokensRequest;
 
     #[test]
@@ -85,7 +63,7 @@ mod tests {
             model: "claude-3-sonnet-20240229".to_string(),
             messages: Some(vec![Message {
                 role: MessageRole::User,
-                content: vec![ContentBlock::text("Hello, world!".to_string())],
+                content: "Hello, world!".to_string(),
             }]),
             system: None,
             tools: None,
@@ -102,7 +80,7 @@ mod tests {
             model: "claude-3-sonnet-20240229".to_string(),
             messages: Some(vec![Message {
                 role: MessageRole::User,
-                content: vec![ContentBlock::text("Hello".to_string())],
+                content: "Hello".to_string(),
             }]),
             system: Some(vec![SystemPrompt {
                 prompt_type: "text".to_string(),
