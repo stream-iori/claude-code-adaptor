@@ -1,11 +1,13 @@
 use crate::adapters::Adaptor;
-use crate::models::claude_messages::{ClaudeMessagesRequest, MessageRole, ToolChoice as ClaudeMessagesToolChoice};
+use crate::models::claude_messages::{
+    ClaudeMessagesRequest, InputMessageContent, InputMessageContentPart, MessageRole, SystemMessage,
+    ToolChoice as ClaudeMessagesToolChoice,
+};
 use crate::models::openai::{
-    OpenAIRequest, OpenAIMessage, OpenAIRole, OpenAIToolDefinition, OpenAIFunctionDefinition,
-    OpenAIToolChoice, OpenAIFunctionChoice,
+    OpenAIFunctionChoice, OpenAIFunctionDefinition, OpenAIMessage, OpenAIRequest, OpenAIRole,
+    OpenAIToolChoice, OpenAIToolDefinition,
 };
 use anyhow::Result;
-
 
 #[derive(Clone)]
 pub struct ClaudeMessagesToOpenAIAdapter;
@@ -29,25 +31,19 @@ impl Adaptor for ClaudeMessagesToOpenAIAdapter {
         let mut messages = Vec::new();
 
         // Add system message if present
-        if let Some(system_content) = claude_request.system {
-            let system_text = match system_content {
-                crate::models::claude_messages::SystemContentEnum::String(text) => text,
-                crate::models::claude_messages::SystemContentEnum::Array(contents) => {
-                    contents
-                        .into_iter()
-                        .filter(|c| c.content_type == "text")
-                        .map(|c| c.text)
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                }
-            };
-            messages.push(OpenAIMessage {
-                role: OpenAIRole::System,
-                content: Some(system_text),
-                tool_calls: None,
-                tool_call_id: None,
-                name: None,
-            });
+        if let Some(system_msges) = claude_request.system {
+            for system_msg in system_msges {
+                let system_text = match system_msg {
+                    SystemMessage { text, .. } => text,
+                };
+                messages.push(OpenAIMessage {
+                    role: OpenAIRole::System,
+                    content: Some(system_text),
+                    tool_calls: None,
+                    tool_call_id: None,
+                    name: None,
+                });
+            }
         }
 
         // Convert Claude messages to OpenAI messages
@@ -57,9 +53,24 @@ impl Adaptor for ClaudeMessagesToOpenAIAdapter {
                 MessageRole::Assistant => OpenAIRole::Assistant,
             };
 
+            let content_text = match claude_msg.content {
+                InputMessageContent::Text(text) => text,
+                InputMessageContent::Parts(parts) => {
+                    // For now, extract text content from parts
+                    parts
+                        .into_iter()
+                        .filter_map(|part| match part {
+                            InputMessageContentPart::Text { text, .. } => Some(text),
+                            _ => None,
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                }
+            };
+
             messages.push(OpenAIMessage {
                 role: openai_role,
-                content: Some(claude_msg.content),
+                content: Some(content_text),
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
@@ -83,16 +94,17 @@ impl Adaptor for ClaudeMessagesToOpenAIAdapter {
 
         // Transform tool_choice if provided
         let tool_choice = claude_request.tool_choice.map(|choice| match choice {
-            ClaudeMessagesToolChoice::Auto => OpenAIToolChoice::String("auto".to_string()),
-            ClaudeMessagesToolChoice::Any => OpenAIToolChoice::String("any".to_string()),
+            ClaudeMessagesToolChoice::Auto { .. } => OpenAIToolChoice::String("auto".to_string()),
+            ClaudeMessagesToolChoice::Any { .. } => OpenAIToolChoice::String("any".to_string()),
             ClaudeMessagesToolChoice::Tool { name, .. } => OpenAIToolChoice::Object {
                 choice_type: "function".to_string(),
                 function: OpenAIFunctionChoice { name },
             },
+            ClaudeMessagesToolChoice::None => OpenAIToolChoice::String("none".to_string()),
         });
 
         Ok(OpenAIRequest {
-            model: "qwen3-coder-flash".to_string(),
+            model: claude_request.model,
             messages,
             max_tokens: claude_request.max_tokens,
             temperature: claude_request.temperature,
@@ -110,30 +122,37 @@ impl Adaptor for ClaudeMessagesToOpenAIAdapter {
 
 #[cfg(test)]
 mod tests {
-    use crate::models::claude_messages::{Message, SystemContentEnum};
     use super::*;
-
+    use crate::models::claude_messages::{
+        ClaudeMessagesRequest, InputMessage, MessageRole, ToolChoice, ToolDefinition,
+    };
 
     #[test]
     fn test_adapt_claude_messages_to_qwen() {
         let adapter = ClaudeMessagesToOpenAIAdapter;
         let claude_request = ClaudeMessagesRequest {
             model: "qwen3-coder".to_string(),
-            messages: vec![Message {
+            messages: vec![InputMessage {
                 role: MessageRole::User,
-                content: "Hello, world!".to_string(),
+                content: InputMessageContent::Text("Hello, world!".to_string()),
             }],
             max_tokens: Some(100),
             temperature: Some(0.7),
+            top_p: Some(1.0),
             stream: Some(false),
-            system: Some(SystemContentEnum::String("You are a helpful assistant".to_string())),
+            system: Some(vec![SystemMessage {
+                content_type: "text".to_string(),
+                text: "You are a helpful assistant".to_string(),
+                cache_control: None,
+                citations: None,
+            }]),
             tools: None,
             tool_choice: None,
-            metadata: None,
-            stop_sequences: None,
-            top_k: None,
-            top_p: None,
             container: None,
+            metadata: None,
+            service_tier: None,
+            stop_sequences: None,
+            thinking: None,
         };
 
         let openai_request = adapter.adapt(claude_request).unwrap();
@@ -152,21 +171,22 @@ mod tests {
         let adapter = ClaudeMessagesToOpenAIAdapter;
         let claude_request = ClaudeMessagesRequest {
             model: "qwen3-coder".to_string(),
-            messages: vec![Message {
+            messages: vec![InputMessage {
                 role: MessageRole::User,
-                content: "Hello, world!".to_string(),
+                content: InputMessageContent::Text("Hello, world!".to_string()),
             }],
             max_tokens: Some(100),
             temperature: Some(0.7),
+            top_p: Some(1.0),
             stream: Some(true),
             system: None,
             tools: None,
             tool_choice: None,
-            metadata: None,
-            stop_sequences: None,
-            top_k: None,
-            top_p: None,
             container: None,
+            metadata: None,
+            service_tier: None,
+            stop_sequences: None,
+            thinking: None,
         };
 
         let openai_request = adapter.adapt(claude_request).unwrap();
@@ -177,5 +197,114 @@ mod tests {
         assert_eq!(openai_request.max_tokens, Some(100));
         assert_eq!(openai_request.temperature, Some(0.7));
         assert_eq!(openai_request.stream, Some(true));
+    }
+
+    #[test]
+    fn test_adapt_claude_messages_with_system_and_tools() {
+        let adapter = ClaudeMessagesToOpenAIAdapter;
+        let claude_request = ClaudeMessagesRequest {
+            model: "qwen3-coder".to_string(),
+            messages: vec![InputMessage {
+                role: MessageRole::User,
+                content: InputMessageContent::Text("What's the weather?".to_string()),
+            }],
+            max_tokens: Some(200),
+            temperature: Some(0.5),
+            top_p: Some(1.0),
+            stream: Some(false),
+            system: Some(vec![SystemMessage {
+                content_type: "text".to_string(),
+                text: "You are a weather assistant".to_string(),
+                cache_control: None,
+                citations: None,
+            }]),
+            tools: Some(vec![ToolDefinition {
+                tool_type: None,
+                name: "get_weather".to_string(),
+                description: "Get weather information".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "location": {"type": "string"}
+                    },
+                    "required": ["location"]
+                }),
+                cache_control: None,
+                other_values: None,
+            }]),
+            tool_choice: Some(ToolChoice::Auto {
+                disable_parallel_tool_use: false,
+            }),
+            container: None,
+            metadata: None,
+            service_tier: None,
+            stop_sequences: None,
+            thinking: None,
+        };
+
+        let openai_request = adapter.adapt(claude_request).unwrap();
+
+        assert_eq!(openai_request.model, "qwen3-coder");
+        assert_eq!(openai_request.messages.len(), 2);
+        assert_eq!(openai_request.messages[0].role, OpenAIRole::System);
+        assert_eq!(
+            openai_request.messages[0].content,
+            Some("You are a weather assistant".to_string())
+        );
+        assert_eq!(openai_request.messages[1].role, OpenAIRole::User);
+        assert_eq!(
+            openai_request.messages[1].content,
+            Some("What's the weather?".to_string())
+        );
+        assert_eq!(openai_request.max_tokens, Some(200));
+        assert_eq!(openai_request.temperature, Some(0.5));
+        assert!(openai_request.tools.is_some());
+        assert_eq!(openai_request.tools.as_ref().unwrap().len(), 1);
+        assert_eq!(
+            openai_request.tools.as_ref().unwrap()[0].function.name,
+            "get_weather"
+        );
+    }
+
+    #[test]
+    fn test_adapt_claude_messages_no_system() {
+        let adapter = ClaudeMessagesToOpenAIAdapter;
+        let claude_request = ClaudeMessagesRequest {
+            model: "qwen3-coder".to_string(),
+            messages: vec![
+                InputMessage {
+                    role: MessageRole::User,
+                    content: InputMessageContent::Text("Hi".to_string()),
+                },
+                InputMessage {
+                    role: MessageRole::Assistant,
+                    content: InputMessageContent::Text("Hello!".to_string()),
+                },
+            ],
+            max_tokens: None,
+            temperature: None,
+            top_p: None,
+            stream: None,
+            system: None,
+            tools: None,
+            tool_choice: None,
+            container: None,
+            metadata: None,
+            service_tier: None,
+            stop_sequences: None,
+            thinking: None,
+        };
+
+        let openai_request = adapter.adapt(claude_request).unwrap();
+
+        assert_eq!(openai_request.model, "qwen3-coder");
+        assert_eq!(openai_request.messages.len(), 2);
+        assert_eq!(openai_request.messages[0].role, OpenAIRole::User);
+        assert_eq!(openai_request.messages[0].content, Some("Hi".to_string()));
+        assert_eq!(openai_request.messages[1].role, OpenAIRole::Assistant);
+        assert_eq!(
+            openai_request.messages[1].content,
+            Some("Hello!".to_string())
+        );
     }
 }

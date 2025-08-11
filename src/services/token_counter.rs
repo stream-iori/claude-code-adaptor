@@ -1,4 +1,5 @@
 use crate::models::claude_count_tokens::{ClaudeCountTokensRequest, ClaudeCountTokensResponse, SystemPrompt};
+use crate::models::claude_messages::InputMessageContent;
 
 pub struct TokenCounter;
 
@@ -11,7 +12,20 @@ impl TokenCounter {
         // Count tokens for messages
         if let Some(messages) = request.messages {
             for message in messages {
-                total_tokens += Self::estimate_tokens(&message.content);
+                let content_str = match &message.content {
+                    InputMessageContent::Text(text) => text.clone(),
+                    InputMessageContent::Parts(parts) => {
+                        // Extract text from parts
+                        parts.iter()
+                            .filter_map(|part| match part {
+                                crate::models::claude_messages::InputMessageContentPart::Text { text, .. } => Some(text.clone()),
+                                _ => None,
+                            })
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    }
+                };
+                total_tokens += Self::estimate_tokens(&content_str);
             }
         }
 
@@ -54,16 +68,16 @@ impl TokenCounter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::claude_messages::{Message, MessageRole};
+    use crate::models::claude_messages::{InputMessage, MessageRole, InputMessageContent, SystemMessage};
     use crate::models::claude_count_tokens::ClaudeCountTokensRequest;
 
     #[test]
     fn test_count_simple_text() {
         let request = ClaudeCountTokensRequest {
             model: "claude-3-sonnet-20240229".to_string(),
-            messages: Some(vec![Message {
+            messages: Some(vec![InputMessage {
                 role: MessageRole::User,
-                content: "Hello, world!".to_string(),
+                content: InputMessageContent::Text("Hello, world!".to_string()),
             }]),
             system: None,
             tools: None,
@@ -78,9 +92,9 @@ mod tests {
     fn test_count_with_system_prompt() {
         let request = ClaudeCountTokensRequest {
             model: "claude-3-sonnet-20240229".to_string(),
-            messages: Some(vec![Message {
+            messages: Some(vec![InputMessage {
                 role: MessageRole::User,
-                content: "Hello".to_string(),
+                content: InputMessageContent::Text("Hello".to_string()),
             }]),
             system: Some(vec![SystemPrompt {
                 prompt_type: "text".to_string(),

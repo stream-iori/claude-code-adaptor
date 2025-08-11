@@ -9,7 +9,7 @@ mod tests {
     use crate::adapters::request_adapter::ClaudeMessagesToOpenAIAdapter;
     use crate::adapters::Adaptor;
     use crate::models::{
-        claude_messages::{ClaudeMessagesRequest, Message, MessageRole, SystemContentEnum},
+        claude_messages::{ClaudeMessagesRequest, InputMessage, MessageRole, InputMessageContent, SystemMessage},
         openai::OpenAIRole,
     };
 
@@ -20,26 +20,32 @@ mod tests {
         let claude_request = ClaudeMessagesRequest {
             model: "qwen3-coder".to_string(),
             messages: vec![
-                Message {
+                InputMessage {
                     role: MessageRole::User,
-                    content: "Write a Rust function".to_string(),
+                    content: InputMessageContent::Text("Write a Rust function".to_string()),
                 },
-                Message {
+                InputMessage {
                     role: MessageRole::Assistant,
-                    content: "I'll write a simple Rust function for you.".to_string(),
+                    content: InputMessageContent::Text("I'll write a simple Rust function for you.".to_string()),
                 },
             ],
             max_tokens: Some(500),
             temperature: Some(0.8),
             stream: Some(false),
-            system: Some(SystemContentEnum::String("You are a Rust expert".to_string())),
+            system: Some(vec![SystemMessage {
+                content_type: "text".to_string(),
+                text: "You are a Rust expert".to_string(),
+                cache_control: None,
+                citations: None,
+            }]),
             tools: None,
             tool_choice: None,
-            metadata: None,
-            stop_sequences: None,
-            top_k: None,
             top_p: Some(0.9),
             container: None,
+            metadata: None,
+            service_tier: None,
+            stop_sequences: None,
+            thinking: None,
         };
 
         let openai_request = adapter.adapt(claude_request).unwrap();

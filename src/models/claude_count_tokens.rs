@@ -1,11 +1,11 @@
 use serde::{Deserialize, Serialize};
-use crate::models::claude_messages::{Message, ToolDefinition};
+use crate::models::claude_messages::{InputMessage, ToolDefinition};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClaudeCountTokensRequest {
     pub model: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub messages: Option<Vec<Message>>,
+    pub messages: Option<Vec<InputMessage>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub system: Option<Vec<SystemPrompt>>,
     #[serde(skip_serializing_if = "Option::is_none")]
